@@ -1,0 +1,4 @@
+services:
+  runoutbot:
+    build: .
+    restart: unless-stopped
