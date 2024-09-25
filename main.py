@@ -101,7 +101,7 @@ async def start_runout(ctx: discord.Interaction):
 
     for i in range(4, 0, -1):
         await asyncio.sleep(1)
-        await ctx.edit_original_response(content=f'Starting a runout in 4 seconds; {len(runouts[m.id]["users"])} players joined')
+        await ctx.edit_original_response(content=f'Starting a runout in {i} seconds; {len(runouts[m.id]["users"])} players joined')
 
     runout = runouts[m.id]
     if len(runout['users']) < 1:
