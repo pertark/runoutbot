@@ -2,10 +2,9 @@ from pokereval.card import Card
 from pokereval.hand_evaluator import HandEvaluator
 import random
 
-def evaluate_hand(hand):
-    return HandEvaluator.evaluate_hand(hand)
+def evaluate_hand(board, hand):
+    return HandEvaluator.evaluate_hand(hand, board=board)
 
-# suits = ['♠', '♥', '♦', '♣']
 suits = [':spades:', ':hearts:', ':diamonds:', ':clubs:']
 
 def card_to_str(card):

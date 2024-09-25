@@ -39,7 +39,7 @@ class PostRunoutModal(discord.ui.View):
             await interaction.response.send_message(content=f"You are not in the hand!", ephemeral=True)
             return
         if post_runouts[interaction.message.id]['acted'][user.id]:
-            # i think silent fail is better here
+            await interaction.response.send_message(content=f"You already showed your hand!", ephemeral=True)
             return
         post_runouts[interaction.message.id]['acted'][user.id] = True
         post_runouts[interaction.message.id]['folded'][user.id] = True
@@ -54,6 +54,7 @@ class PostRunoutModal(discord.ui.View):
             await interaction.response.send_message(content=f"You are not in the hand!", ephemeral=True)
             return
         if post_runouts[interaction.message.id]['acted'][user.id]:
+            await interaction.response.send_message(content=f"You already showed your hand!", ephemeral=True)
             return
         post_runouts[interaction.message.id]['acted'][user.id] = True
 
@@ -64,13 +65,13 @@ class PostRunoutModal(discord.ui.View):
 async def finish_runout(interaction):
     if all(post_runouts[interaction.message.id]['acted'].values()):
         runout = runouts[post_runouts[interaction.message.id]['runout_id']]
-        winners = []
+        community_cards = runout['community_cards']
 
         scores = {}
         for user in runout['users']:
             if not post_runouts[interaction.message.id]['folded'][user.id]:
                 hand = runout['hands'][user]
-                score = poker.evaluate_hand(hand)
+                score = poker.evaluate_hand(community_cards, hand)
                 scores[user] = score
         
         if len(scores) == 0:
@@ -79,6 +80,7 @@ async def finish_runout(interaction):
             del post_runouts[interaction.message.id]
             return
 
+        winners = []
         max_score = max(scores.values())
         for user, score in scores.items():
             if score == max_score:
@@ -88,18 +90,23 @@ async def finish_runout(interaction):
             await interaction.message.channel.send(content=f"{winners[0].mention} wins!")
         else:
             await interaction.message.channel.send(content=f"It's a tie between {', '.join([winner.mention for winner in winners])}!")
+
+        # remove buttons
+        await interaction.message.edit(embed=post_runouts[interaction.message.id]['embed'], view=None)
+    
+        # cleanup
         del runouts[post_runouts[interaction.message.id]['runout_id']]
         del post_runouts[interaction.message.id]
 
 
 @bot.tree.command(name='runout', description='Start a runout')
-async def start_runout(ctx: discord.Interaction):
-    await ctx.response.send_message('Starting a runout in 5 seconds', view=RunoutButton())
+async def start_runout(ctx: discord.Interaction, countdown: int = 10):
+    await ctx.response.send_message(f'Starting a runout in {countdown} seconds; 0 players joined', view=RunoutButton())
     msg = await ctx.original_response()
     m = await msg.fetch()
-    runouts[m.id] = {'users': [], 'interaction_handles': {}, 'hands': {}}
+    runouts[m.id] = {'users': [], 'interaction_handles': {}, 'hands': {}, 'community_cards': []}
 
-    for i in range(4, 0, -1):
+    for i in range(countdown - 1, 0, -1):
         await asyncio.sleep(1)
         await ctx.edit_original_response(content=f'Starting a runout in {i} seconds; {len(runouts[m.id]["users"])} players joined')
 
@@ -109,7 +116,7 @@ async def start_runout(ctx: discord.Interaction):
         del runouts[m.id]
         return
     
-    await ctx.edit_original_response(content='Starting runout...', view=None)
+    await ctx.edit_original_response(content=f'Starting runout between {", ".join(user.mention for user in runout["users"])}', view=None)
 
     deck = poker.Deck()
     for user in runout['users']:
@@ -119,10 +126,16 @@ async def start_runout(ctx: discord.Interaction):
         await itn.edit_original_response(content=f'{user.mention} has been dealt {poker.card_to_str(hand[0])} and {poker.card_to_str(hand[1])}')
 
     community_cards = [deck.deal(), deck.deal(), deck.deal(), deck.deal(), deck.deal()]
+    runouts[m.id]['community_cards'] = community_cards
 
     embed = discord.Embed(title='Community cards', colour=0xFFFFFF, description=f'{poker.card_to_str(community_cards[0])} {poker.card_to_str(community_cards[1])} {poker.card_to_str(community_cards[2])}')
     community_msg = await m.channel.send(embed=embed)
-    post_runouts[community_msg.id] = {'runout_id': m.id, 'acted': {user.id: False for user in runout['users']}, 'folded': {user.id: False for user in runout['users']}}
+    post_runouts[community_msg.id] = {
+        'runout_id': m.id, 
+        'acted': {user.id: False for user in runout['users']}, 
+        'folded': {user.id: False for user in runout['users']},
+        'embed': None,
+        }
     await asyncio.sleep(2)
     embed = discord.Embed(title='Community cards', colour=0xFFFFFF, description=f'{poker.card_to_str(community_cards[0])} {poker.card_to_str(community_cards[1])} {poker.card_to_str(community_cards[2])} {poker.card_to_str(community_cards[3])}')
     await community_msg.edit(embed=embed)
@@ -130,6 +143,7 @@ async def start_runout(ctx: discord.Interaction):
     embed = discord.Embed(title='Community cards', colour=0xFFFFFF, description=f'{poker.card_to_str(community_cards[0])} {poker.card_to_str(community_cards[1])} {poker.card_to_str(community_cards[2])} {poker.card_to_str(community_cards[3])} {poker.card_to_str(community_cards[4])}')
     await community_msg.edit(embed=embed)
     await asyncio.sleep(1)
+    post_runouts[community_msg.id]['embed'] = embed
     await community_msg.edit(embed=embed, view=PostRunoutModal())
     
 @bot.event
